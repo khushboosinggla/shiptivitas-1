@@ -10,9 +10,9 @@ export default class Board extends React.Component {
     const clients = this.getClients();
     this.state = {
       clients: {
-        backlog: clients.filter(client => !client.status || client.status === 'backlog'),
-        inProgress: clients.filter(client => client.status && client.status === 'in-progress'),
-        complete: clients.filter(client => client.status && client.status === 'complete'),
+        backlog: clients.map(client => ({...client, status:'backlog'})),
+        inProgress: [],
+        complete: [],
       }
     }
     this.swimlanes = {
@@ -21,6 +21,78 @@ export default class Board extends React.Component {
       complete: React.createRef(),
     }
   }
+  componentDidMount() {
+  this.dragula = Dragula([
+    this.swimlanes.backlog.current,
+    this.swimlanes.inProgress.current,
+    this.swimlanes.complete.current
+  ]);
+
+  
+this.dragula.on('drop', () => {
+  const containers = {
+    backlog: this.swimlanes.backlog.current,
+    inProgress: this.swimlanes.inProgress.current,
+    complete: this.swimlanes.complete.current,
+  };
+
+  // Keep a lookup of all existing clients.
+  const allClients = [
+    ...this.state.clients.backlog,
+    ...this.state.clients.inProgress,
+    ...this.state.clients.complete,
+  ];
+
+  const clientsById = {};
+  allClients.forEach(client => {
+    clientsById[client.id] = client;
+  });
+
+  // Read the order and destination of the dropped cards.
+  const readLane = (container, status) =>
+    Array.from(container.children)
+      .map(card => {
+        const client = clientsById[card.dataset.id];
+        return client ? { ...client, status } : null;
+      })
+      .filter(Boolean);
+
+  const nextClients = {
+    backlog: readLane(containers.backlog, 'backlog'),
+    inProgress: readLane(containers.inProgress, 'in-progress'),
+    complete: readLane(containers.complete, 'complete'),
+  };
+
+  // Restore the DOM to React's previous order before
+  // asking React to render the new state.
+  const elementsById = {};
+
+  Object.values(containers).forEach(container => {
+    Array.from(container.children).forEach(card => {
+      elementsById[card.dataset.id] = card;
+    });
+  });
+
+  Object.keys(containers).forEach(lane => {
+    this.state.clients[lane].forEach(client => {
+      const card = elementsById[client.id];
+      if (card) {
+        containers[lane].appendChild(card);
+      }
+    });
+  });
+
+  // React can now safely render the new order and statuses.
+  this.setState({ clients: nextClients });
+});
+
+}
+
+componentWillUnmount() {
+  if (this.dragula) {
+    this.dragula.destroy();
+  }
+}
   getClients() {
     return [
       ['1','Stark, White and Abbott','Cloned Optimal Architecture', 'in-progress'],
